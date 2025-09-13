@@ -1,0 +1,35 @@
+{
+  "camera_index": 0,
+  "frame_width": 1280,
+  "frame_height": 720,
+  "gesture_debounce_ms": 500,
+  "smoothing": 5,
+  "pointer_radius": 12,
+  "draw_color_bgr": [
+    0,
+    0,
+    255
+  ],
+  "stroke_thickness": 3,
+  "quick_messages": [
+    "On my way",
+    "Can you repeat?",
+    "I agree"
+  ],
+  "mappings": {
+    "prev_slide": "thumb_only",
+    "next_slide": "pinky_only",
+    "pointer": "index_and_middle",
+    "draw": "index_only",
+    "undo": "middle_three",
+    "clear": "five_open",
+    "mute_toggle": "pinch_thumb_index",
+    "send_quick_msg": "thumb_and_pinky"
+  },
+  "platform_shortcuts": {
+    "slides_next_key": "right",
+    "slides_prev_key": "left",
+    "mute_toggle_key_windows_zoom": "alt+a",
+    "mute_toggle_key_generic": "ctrl+shift+m"
+  }
+}
