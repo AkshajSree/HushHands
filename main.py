@@ -218,98 +218,128 @@ def send_quick_message(index=0):
 
 # ------------------------------ Main Loop ------------------------------
 def main():
-    cap=cv2.VideoCapture(config['camera_index'])
+    cap = cv2.VideoCapture(config['camera_index'])
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, config['frame_width'])
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, config['frame_height'])
-    detector=GestureDetector()
-    annot=AnnotationLayer(config['frame_width'],config['frame_height'])
+    detector = GestureDetector()
+    annot = AnnotationLayer(config['frame_width'], config['frame_height'])
 
-    quick_msg_idx=0
-    drawing_mode=False
-    pointer_mode=False
-    gesture_mode=True
-    smoothed_coords=deque(maxlen=config['smoothing'])
+    quick_msg_idx = 0
+    drawing_mode = False
+    pointer_mode = False
+    gesture_mode = True
+    smoothed_coords = deque(maxlen=config['smoothing'])
+    mouse_down = False  # for actual drawing on slide
 
     while True:
-        ret,frame=cap.read()
+        ret, frame = cap.read()
         if not ret: break
-        frame=cv2.flip(frame,1)
-        h,w,_=frame.shape
-        frame_rgb=cv2.cvtColor(frame,cv2.COLOR_BGR2RGB)
-        results=detector.process(frame_rgb)
-        gestures,payload=detector.interpret(results)
+        frame = cv2.flip(frame, 1)
+        h, w, _ = frame.shape
+        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        results = detector.process(frame_rgb)
+        gestures, payload = detector.interpret(results)
 
         # Toggle Gesture Mode
         if 'palm_and_fist' in gestures and can_do('toggle_gesture_mode'):
-            gesture_mode=not gesture_mode
+            gesture_mode = not gesture_mode
 
-        if not gesture_mode:
-            overlay=frame.copy()
-            cv2.putText(overlay,"GESTURE MODE OFF - Press Palm+Fist to Enable",(50,50),cv2.FONT_HERSHEY_SIMPLEX,0.7,(0,0,255),2)
-            cv2.imshow('HushHands - Live',overlay)
-            key=cv2.waitKey(1)&0xFF
-            if key==27: break
-            continue
+        active_window = get_active_window() or ""
+        is_ppt = 'powerpoint' in active_window.lower() or 'slide' in active_window.lower()
 
-        active=get_active_window() or "unknown"
-        context='presentation' if any(k.lower() in (active.lower() if active else '') for k in ['powerpoint','slide','google meet','present']) else 'generic'
+        # ----------------- Gesture Mode OFF → Camera Cursor + Draw on Slide -----------------
+        if not gesture_mode and is_ppt:
+            overlay = frame.copy()
+            cv2.putText(overlay, "Camera Cursor Mode - Draw on Slide Enabled", (50,50),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0,0,255), 2)
+            if payload.get('coords'):
+                cx = int(payload['coords'][0] * pyautogui.size().width)
+                cy = int(payload['coords'][1] * pyautogui.size().height)
+                pyautogui.moveTo(cx, cy, duration=0.01)
 
-        mapping=config['mappings']
-        if mapping.get('next_slide') in gestures and can_do('next_slide'): press_key(config['platform_shortcuts'].get('slides_next_key','right'))
-        if mapping.get('prev_slide') in gestures and can_do('prev_slide'): press_key(config['platform_shortcuts'].get('slides_prev_key','left'))
-        pointer_mode=mapping.get('pointer') in gestures
+                # Draw gesture → mouse down/drag
+                if mapping.get('draw') in gestures:
+                    if not mouse_down:
+                        pyautogui.mouseDown()
+                        mouse_down = True
+                else:
+                    if mouse_down:
+                        pyautogui.mouseUp()
+                        mouse_down = False
 
-        # Drawing logic
+            cv2.imshow('HushHands - Live', overlay)
+            key = cv2.waitKey(1) & 0xFF
+            if key == 27: break
+            continue  # skip HushHands logic
+
+        # ----------------- Gesture Mode ON → HushHands features -----------------
+        context = 'presentation' if any(k.lower() in (active_window.lower() if active_window else '') 
+                                       for k in ['powerpoint','slide','google meet','present']) else 'generic'
+        mapping = config['mappings']
+
+        # Slide controls
+        if mapping.get('next_slide') in gestures and can_do('next_slide'):
+            press_key(config['platform_shortcuts'].get('slides_next_key','right'))
+        if mapping.get('prev_slide') in gestures and can_do('prev_slide'):
+            press_key(config['platform_shortcuts'].get('slides_prev_key','left'))
+
+        pointer_mode = mapping.get('pointer') in gestures
+
+        # Drawing logic in OpenCV overlay (still works)
         if mapping.get('draw') in gestures and payload.get('coords'):
-            cx=int(payload['coords'][0]*w)
-            cy=int(payload['coords'][1]*h)
-            smoothed_coords.append((cx,cy))
-            avgx=int(sum([p[0] for p in smoothed_coords])/len(smoothed_coords))
-            avgy=int(sum([p[1] for p in smoothed_coords])/len(smoothed_coords))
-            if not drawing_mode: drawing_mode=True; annot.start_stroke(avgx,avgy)
-            else: annot.add_point(avgx,avgy)
+            cx = int(payload['coords'][0] * w)
+            cy = int(payload['coords'][1] * h)
+            smoothed_coords.append((cx, cy))
+            avgx = int(sum([p[0] for p in smoothed_coords])/len(smoothed_coords))
+            avgy = int(sum([p[1] for p in smoothed_coords])/len(smoothed_coords))
+            if not drawing_mode:
+                drawing_mode = True
+                annot.start_stroke(avgx, avgy)
+            else:
+                annot.add_point(avgx, avgy)
         else:
-            if drawing_mode: drawing_mode=False; annot.end_stroke()
+            if drawing_mode:
+                drawing_mode = False
+                annot.end_stroke()
 
-        if mapping.get('undo') in gestures and can_do('undo'): annot.undo()
-        if mapping.get('clear') in gestures and can_do('clear'): annot.clear()
-        if mapping.get('mute_toggle') in gestures and can_do('mute_toggle'): toggle_mute()
-        if mapping.get('send_quick_msg') in gestures and can_do('send_quick_msg'): send_quick_message(quick_msg_idx); quick_msg_idx+=1
+        if mapping.get('undo') in gestures and can_do('undo'):
+            annot.undo()
+        if mapping.get('clear') in gestures and can_do('clear'):
+            annot.clear()
+        if mapping.get('mute_toggle') in gestures and can_do('mute_toggle'):
+            toggle_mute()
+        if mapping.get('send_quick_msg') in gestures and can_do('send_quick_msg'):
+            send_quick_message(quick_msg_idx)
+            quick_msg_idx += 1
 
-        overlay=frame.copy()
+        overlay = frame.copy()
         annot.draw_on(overlay)
 
         # Gesture Mode indicator
-        if gesture_mode:
-            cv2.circle(overlay,(30,30),15,(0,255,0),-1)
-            cv2.putText(overlay,"Gesture Mode ON",(50,37),cv2.FONT_HERSHEY_SIMPLEX,0.6,(0,255,0),2)
-        else:
-            cv2.circle(overlay,(30,30),15,(0,0,255),-1)
-            cv2.putText(overlay,"Gesture Mode OFF",(50,37),cv2.FONT_HERSHEY_SIMPLEX,0.6,(0,0,255),2)
+        cv2.circle(overlay,(30,30),15,(0,255,0) if gesture_mode else (0,0,255),-1)
+        cv2.putText(overlay,"Gesture Mode ON" if gesture_mode else "Gesture Mode OFF",(50,37),
+                    cv2.FONT_HERSHEY_SIMPLEX,0.6,(0,255,0) if gesture_mode else (0,0,255),2)
 
         # Pointer
         if pointer_mode and payload.get('coords'):
-            px=int(payload['coords'][0]*w)
-            py=int(payload['coords'][1]*h)
+            px = int(payload['coords'][0]*w)
+            py = int(payload['coords'][1]*h)
             cv2.circle(overlay,(px,py),config['pointer_radius'],(0,255,255),-1)
             cv2.circle(overlay,(px,py),config['pointer_radius']+6,(0,0,0),2)
 
-        y0=70
-        cv2.putText(overlay,f"Gestures: {', '.join(list(gestures))} | Mode: {context}",(10,y0),cv2.FONT_HERSHEY_SIMPLEX,0.7,(255,255,255),2)
-
         # Mini feed
-        mini=cv2.resize(frame,(240,135))
-        overlay[10:10+135,w-10-240:w-10]=mini
-        cv2.rectangle(overlay,(w-10-240-2,8),(w-10+2,8+135+2),(200,200,200),1)
+        mini = cv2.resize(frame,(240,135))
+        overlay[10:10+135, w-10-240:w-10] = mini
+        cv2.rectangle(overlay, (w-10-240-2,8), (w-10+2,8+135+2), (200,200,200),1)
 
-        cv2.imshow('HushHands - Live',overlay)
-        key=cv2.waitKey(1)&0xFF
-        if key==27: break
-        elif key==ord('c'): annot.clear()
-        elif key==ord('u'): annot.undo()
+        cv2.imshow('HushHands - Live', overlay)
+        key = cv2.waitKey(1) & 0xFF
+        if key == 27: break
+        elif key == ord('c'): annot.clear()
+        elif key == ord('u'): annot.undo()
 
     cap.release()
     cv2.destroyAllWindows()
-
+    
 if __name__=='__main__':
     main()
