@@ -1,0 +1,28 @@
+{
+  "gesture_to_action": {
+    "open_palm": "next_slide",
+    "fist": "previous_slide",
+    "point": "toggle_mute",
+    "ok": "send_brb"
+  },
+  "actions": {
+    "next_slide": {"type": "key", "keys": ["right"]},
+    "previous_slide": {"type": "key", "keys": ["left"]},
+    "toggle_mute": {"type": "hotkey", "keys": ["ctrl", "shift", "m"]},
+    "send_brb": {"type": "type_text", "text": "BRB"},
+    "start_presentation": {"type": "key", "keys": ["f5"]},
+    "stop_presentation": {"type": "key", "keys": ["esc"]}
+  },
+  "gesture_settings": {
+    "min_frames_for_gesture": 6,
+    "cooldown_seconds": 1.2,
+    "detection_confidence": 0.6,
+    "tracking_confidence": 0.5
+  },
+  "video": {
+    "camera_index": 2,
+    "flip_horizontal": true,
+    "frame_width": 1280,
+    "frame_height": 720
+  }
+}
