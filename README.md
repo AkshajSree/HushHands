@@ -48,7 +48,7 @@ Research shows that even with thorough technical preparation, unpredictable fact
 
 These features collectively create a flexible, natural, and mindful gesture-based interface to improve digital interaction and presentation control.
 
-##**Tech Stack**
+## **Tech Stack**
 Programming Language: Python
 Computer Vision: OpenCV
 For video capture, frame processing, and drawing overlays.
